@@ -1,0 +1,18 @@
+# Unreal transient folders
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# Visual Studio / Rider / IDE
+.vs/
+.idea/
+*.sln
+*.VC.db
+*.opensdf
+*.sdf
+*.suo
+
+# OS junk
+.DS_Store
+Thumbs.db
