@@ -3,43 +3,107 @@
 
 #include "Player/AegisPlayerController.h"
 #include "EnhancedInputSubsystems.h"
-#include "Core/AegisLog.h"
-
-AAegisPlayerController::AAegisPlayerController()
-{
-}
+#include "Character/AegisCharacter.h"
+#include "Combat/AegisHealthComponent.h"
+#include "UI/UAegisHealthHUDWidget.h"
 
 void AAegisPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (!IsLocalController())
+	if (HealthWidgetClass)
 	{
-		return;
+		HealthWidget = CreateWidget<UUAegisHealthHUDWidget>(this, HealthWidgetClass);
+		if (HealthWidget)
+		{
+			HealthWidget->AddToViewport();
+		}
 	}
 
-	if (!DefaultMappingContext)
+	// 이미 폰이 있으면 바로 바인딩
+	BindToPawn(GetPawn());
+}
+
+void AAegisPlayerController::SetupInputComponent()
+{
+	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(
+		GetLocalPlayer()))
 	{
-		UE_LOG(LogAegis, Warning, TEXT("DefaultMappingContext not set on PlayerController"));
-		return;
+		Subsystem->AddMappingContext(DefaultMappingContext, 0);
 	}
+}
 
-	ULocalPlayer* LP = GetLocalPlayer();
-	if (!LP)
+void AAegisPlayerController::OnPossess(APawn* InPawn)
+{
+	Super::OnPossess(InPawn);
+
+	BindToPawn(InPawn);
+
+	InPawn->OnDestroyed.AddDynamic(this, &AAegisPlayerController::OnPawnDestroyed);
+}
+
+void AAegisPlayerController::OnUnPossess()
+{
+	Unbind();
+	Super::OnUnPossess();
+}
+
+void AAegisPlayerController::OnPawnDestroyed(AActor* DestroyedActor)
+{
+	if (AAegisCharacter* RespawnedCharacter = GetWorld()->SpawnActor<AAegisCharacter>(CharacterClass, RespawnTransform))
 	{
-		UE_LOG(LogAegis, Error, TEXT("No LocalPlayer"));
-		return;
+		Possess(RespawnedCharacter);
 	}
+}
 
-	UEnhancedInputLocalPlayerSubsystem* Subsystem = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
-	if (!Subsystem)
+void AAegisPlayerController::BindToPawn(APawn* BindPawn)
+{
+	Unbind();
+	if (!BindPawn)
+		return;
+
+	CachedHealthComp = BindPawn->FindComponentByClass<UAegisHealthComponent>();
+	if (!CachedHealthComp)
+		return;
+
+	CachedHealthComp->OnHealthChanged.AddDynamic(this, &AAegisPlayerController::HandleHealthChanged);
+}
+
+void AAegisPlayerController::Unbind()
+{
+	if (CachedHealthComp)
 	{
-		UE_LOG(LogAegis, Error, TEXT("No EnhancedInputLocalPlayerSubsystem"));
-		return;
+		CachedHealthComp->OnHealthChanged.RemoveAll(this);
+		CachedHealthComp = nullptr;
 	}
+}
 
+void AAegisPlayerController::HandleHealthChanged(UAegisHealthComponent* HealthComponent, float OldHealth,
+                                                 float NewHealth, float Delta)
+{
+	if (HealthWidget && HealthComponent)
+	{
+		HealthWidget->SetHealth(NewHealth, HealthComponent->MaxHealth);
+	}
+}
 
+void AAegisPlayerController::SetRespawnTransform(const FTransform& NewRespawn)
+{
+	RespawnTransform = NewRespawn;
+}
 
-	Subsystem->AddMappingContext(DefaultMappingContext, 0);
-	UE_LOG(LogAegis, Log, TEXT("Added Mapping Context: %s"), *DefaultMappingContext.GetName());
+void AAegisPlayerController::DamageSelf(float Amount)
+{
+	if (CachedHealthComp)
+	{
+		CachedHealthComp->ApplyDamage(Amount);
+	}
+}
+
+void AAegisPlayerController::HealSelf(float Amount)
+{
+	if (CachedHealthComp)
+	{
+		CachedHealthComp->Heal(Amount);
+	}
 }

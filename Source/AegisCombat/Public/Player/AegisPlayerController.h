@@ -6,7 +6,10 @@
 #include "GameFramework/PlayerController.h"
 #include "AegisPlayerController.generated.h"
 
+class AAegisCharacter;
 class UInputMappingContext;
+class UAegisHealthComponent;
+class UUAegisHealthHUDWidget;
 
 /**
  * 
@@ -17,12 +20,47 @@ class AEGISCOMBAT_API AAegisPlayerController : public APlayerController
 	GENERATED_BODY()
 
 public:
-	AAegisPlayerController();
+	virtual void BeginPlay() override;
+	virtual void SetupInputComponent() override;
+	virtual void OnPossess(APawn* InPawn) override;
+	virtual void OnUnPossess() override;
+
+public:
+	void SetRespawnTransform(const FTransform& NewRespawn);
+
+	UFUNCTION(Exec)
+	void DamageSelf(float Amount = 10.f);
+
+	UFUNCTION(Exec)
+	void HealSelf(float Amount = 10.f);
 
 protected:
-	virtual void BeginPlay() override;
+	UFUNCTION()
+	void OnPawnDestroyed(AActor* DestroyedActor);
+
+private:
+	void BindToPawn(APawn* Pawn);
+	void Unbind();
+
+	UFUNCTION()
+	void HandleHealthChanged(UAegisHealthComponent* HealthComponent, float OldHealth, float NewHealth, float Delta);
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UInputMappingContext> DefaultMappingContext;
+
+	UPROPERTY(EditAnywhere, Category = "Respawn")
+	TSubclassOf<AAegisCharacter> CharacterClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UUAegisHealthHUDWidget> HealthWidgetClass;
+
+	FTransform RespawnTransform;
+
+private:
+	UPROPERTY()
+	TObjectPtr<UUAegisHealthHUDWidget> HealthWidget;
+
+	UPROPERTY()
+	TObjectPtr<UAegisHealthComponent> CachedHealthComp;
 };

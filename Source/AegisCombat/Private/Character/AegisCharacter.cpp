@@ -9,6 +9,7 @@
 #include "InputActionValue.h"
 #include "Combat/AegisCombatComponent.h"
 #include "Core/AegisLog.h"
+#include "Player/AegisPlayerController.h"
 
 // Sets default values
 AAegisCharacter::AAegisCharacter()
@@ -19,17 +20,16 @@ AAegisCharacter::AAegisCharacter()
 
 	SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
 	SpringArm->SetupAttachment(GetRootComponent());
-	SpringArm->TargetArmLength = 350.f;
-	SpringArm->bUsePawnControlRotation = true;
 
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
-	Camera->SetupAttachment(SpringArm);
-	Camera->bUsePawnControlRotation = false;
+	Camera->SetupAttachment(SpringArm, USpringArmComponent::SocketName);
 
 	Combat = CreateDefaultSubobject<UAegisCombatComponent>(TEXT("Combat"));
 
 	// Character rotation driven by movement
+	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
+	bUseControllerRotationRoll = false;
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 720.f, 0.f);
 }
@@ -45,39 +45,26 @@ void AAegisCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 		UE_LOG(LogAegis, Error, TEXT("EnhancedInputComponent missing"));
 		return;
 	}
+	
+	EIC->BindAction(IA_Move, ETriggerEvent::Triggered, this, &AAegisCharacter::HandleMove);
+	EIC->BindAction(IA_Look, ETriggerEvent::Triggered, this, &AAegisCharacter::HandleLook);
+	EIC->BindAction(IA_Attack, ETriggerEvent::Started, this, &AAegisCharacter::HandleAttackStarted);
+}
 
-	if (IA_Move)
-	{
-		EIC->BindAction(IA_Move, ETriggerEvent::Triggered, this, &AAegisCharacter::HandleMove);
-	}
-	else
-	{
-		UE_LOG(LogAegis, Warning, TEXT("IA_Move not set"));
-	}
+void AAegisCharacter::NotifyControllerChanged()
+{
+	Super::NotifyControllerChanged();
 
-	if (IA_Look)
+	if (AAegisPlayerController* PC = Cast<AAegisPlayerController>(GetController()))
 	{
-		EIC->BindAction(IA_Look, ETriggerEvent::Triggered, this, &AAegisCharacter::HandleLook);
-	}
-	else
-	{
-		UE_LOG(LogAegis, Warning, TEXT("IA_Look not set"));
-	}
-
-	if (IA_Attack)
-	{
-		EIC->BindAction(IA_Attack, ETriggerEvent::Started, this, &AAegisCharacter::HandleAttackStarted);
-	}
-	else
-	{
-		UE_LOG(LogAegis, Warning, TEXT("IA_Attack not set"));
+		PC->SetRespawnTransform(GetActorTransform());
 	}
 }
 
 void AAegisCharacter::HandleMove(const FInputActionValue& Value)
 {
 	const FVector2D Axis = Value.Get<FVector2D>();
-	if (!Controller)
+	if (!GetController())
 		return;
 
 	const FRotator ControlRot = Controller->GetControlRotation();
@@ -92,6 +79,9 @@ void AAegisCharacter::HandleMove(const FInputActionValue& Value)
 
 void AAegisCharacter::HandleLook(const FInputActionValue& Value)
 {
+	if (!GetController())
+		return;
+	
 	const FVector2D Axis = Value.Get<FVector2D>();
 	AddControllerYawInput(Axis.X);
 	AddControllerPitchInput(-Axis.Y);
